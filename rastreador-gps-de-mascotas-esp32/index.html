@@ -27,7 +27,7 @@
     header h1 { font-size: 1.25rem; font-weight: bold; }
     header p { font-size: 0.8rem; color: #c7d2fe; margin-top: 2px; }
 
-    /* Indicador con luz verde brillante */
+    /* Indicador de conexión Inteligente (Verde / Rojo) */
     .status-badge {
       display: inline-flex;
       align-items: center;
@@ -37,22 +37,40 @@
       font-size: 0.85rem;
       font-weight: 700;
       background: rgba(15, 23, 42, 0.8);
+      transition: all 0.3s ease;
+    }
+
+    /* Estado CONECTADO (Verde) */
+    .status-badge.online {
       border: 1px solid rgba(16, 185, 129, 0.4);
       color: #34d399;
     }
-    
+    .status-dot.online {
+      background-color: #10b981;
+      box-shadow: 0 0 12px #10b981;
+      animation: pulso 1.5s infinite;
+    }
+
+    /* Estado DESCONECTADO (Rojo) */
+    .status-badge.offline {
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #f87171;
+    }
+    .status-dot.offline {
+      background-color: #ef4444;
+      box-shadow: 0 0 12px #ef4444;
+      animation: pulso 1.5s infinite;
+    }
+
     .status-dot {
       width: 12px;
       height: 12px;
       border-radius: 50%;
-      background-color: #10b981;
-      box-shadow: 0 0 12px #10b981, 0 0 4px #34d399;
-      animation: pulsoVerde 1.5s infinite;
     }
 
-    @keyframes pulsoVerde {
+    @keyframes pulso {
       0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.6; transform: scale(0.9); }
+      50% { opacity: 0.5; transform: scale(0.9); }
     }
 
     .main-layout {
@@ -117,7 +135,6 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
-      transition: background 0.2s;
     }
     .btn-center:hover { background: #4338ca; }
   </style>
@@ -130,10 +147,10 @@
       <p>ESP32 DevKit V1 + NEO-6M | Proyecto de Robótica (Paraguay)</p>
     </div>
 
-    <!-- Indicador en Verde Fijo -->
-    <div class="status-badge">
-      <span class="status-dot"></span>
-      <span>Conectado con rastreador</span>
+    <!-- Indicador dinámico que cambia de color y texto -->
+    <div class="status-badge offline" id="statusBadge">
+      <span class="status-dot offline" id="statusDot"></span>
+      <span id="statusText">Rastreador desconectado</span>
     </div>
   </header>
 
@@ -144,19 +161,19 @@
         <div class="coords-grid">
           <div class="coord-item">
             <span>Latitud</span>
-            <strong id="valLat">-25.283045</strong>
+            <strong id="valLat">--.------</strong>
           </div>
           <div class="coord-item">
             <span>Longitud</span>
-            <strong id="valLng">-57.631999</strong>
+            <strong id="valLng">--.------</strong>
           </div>
         </div>
       </div>
 
       <div class="card" style="font-size:0.85rem; line-height: 1.8;">
-        <div>📡 Estado: <strong style="color:#34d399;">En línea</strong></div>
-        <div>⏱️ Última señal: <strong id="valHora">Recién</strong></div>
-        <div>🐾 Mascota: <strong>Activa</strong></div>
+        <div>📡 Estado: <strong id="lblEstado" style="color:#f87171;">Desconectado</strong></div>
+        <div>⏱️ Última señal: <strong id="valHora">Sin datos</strong></div>
+        <div>🐾 Puntos en ruta: <strong id="valPuntos">0</strong></div>
       </div>
 
       <button class="btn-center" id="btnCenter">
@@ -170,7 +187,7 @@
   <script>
     const API_URL = 'https://rastreador-gps-v4ww.onrender.com/datos';
 
-    // Iniciar el mapa centrado en Paraguay
+    // Iniciar mapa en Paraguay
     const map = L.map('map').setView([-25.283045, -57.631999], 15);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -178,21 +195,27 @@
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    // Icono animado del perrito
     const petIcon = L.divIcon({
       html: '<div style="background:#4f46e5; border:3px solid #ffffff; border-radius:50%; width:40px; height:40px; display:flex; align-items:center; justify-content:center; font-size:22px; box-shadow:0 4px 12px rgba(0,0,0,0.6);">🐶</div>',
       iconSize: [40, 40],
       iconAnchor: [20, 20]
     });
 
-    let marker = L.marker([-25.283045, -57.631999], { icon: petIcon }).addTo(map);
-    marker.bindPopup('<b>🐾 ¡Tu mascota está aquí!</b>');
-
+    let marker = null;
     let polyline = L.polyline([], { color: '#818cf8', weight: 4, dashArray: '5, 5' }).addTo(map);
     let ruta = [];
 
-    // Consulta periódica a tu servidor en Render
-    async function actualizarPosicion() {
+    const statusBadge = document.getElementById('statusBadge');
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const lblEstado = document.getElementById('lblEstado');
+    const valLat = document.getElementById('valLat');
+    const valLng = document.getElementById('valLng');
+    const valHora = document.getElementById('valHora');
+    const valPuntos = document.getElementById('valPuntos');
+
+    // Función que revisa si el ESP32 está transmitiendo
+    async function verificarRastreador() {
       try {
         const res = await fetch(API_URL);
         const data = await res.json();
@@ -201,29 +224,74 @@
           const lat = parseFloat(data.lat);
           const lng = parseFloat(data.lng);
 
-          document.getElementById('valLat').textContent = lat.toFixed(6);
-          document.getElementById('valLng').textContent = lng.toFixed(6);
-          document.getElementById('valHora').textContent = new Date().toLocaleTimeString('es-PY');
+          // Comprobamos hace cuántos segundos se envió el último dato
+          const tiempoUltimoEnvio = data.hora ? new Date(data.hora).getTime() : Date.now();
+          const segundosSinSenal = (Date.now() - tiempoUltimoEnvio) / 1000;
+
+          // Si pasaron MENOS de 15 segundos -> ESTÁ CONECTADO (VERDE)
+          if (segundosSinSenal <= 15) {
+            statusBadge.className = 'status-badge online';
+            statusDot.className = 'status-dot online';
+            statusText.textContent = 'Conectado con rastreador';
+            lblEstado.textContent = 'En línea';
+            lblEstado.style.color = '#34d399';
+          } else {
+            // Si pasaron MÁS de 15 segundos sin recibir nada nuevo -> DESCONECTADO (ROJO)
+            statusBadge.className = 'status-badge offline';
+            statusDot.className = 'status-dot offline';
+            statusText.textContent = 'Rastreador desconectado';
+            lblEstado.textContent = 'Desconectado';
+            lblEstado.style.color = '#f87171';
+          }
+
+          valLat.textContent = lat.toFixed(6);
+          valLng.textContent = lng.toFixed(6);
+          if (data.hora) {
+            valHora.textContent = new Date(data.hora).toLocaleTimeString('es-PY');
+          }
 
           const nuevaPos = [lat, lng];
-          marker.setLatLng(nuevaPos);
+          if (!marker) {
+            marker = L.marker(nuevaPos, { icon: petIcon }).addTo(map);
+            marker.bindPopup('<b>🐾 ¡Tu mascota está aquí!</b>');
+            map.setView(nuevaPos, 16);
+          } else {
+            marker.setLatLng(nuevaPos);
+          }
+
           ruta.push(nuevaPos);
           polyline.setLatLngs(ruta);
+          valPuntos.textContent = ruta.length;
+
         } else {
-          document.getElementById('valHora').textContent = new Date().toLocaleTimeString('es-PY');
+          // No hay datos -> DESCONECTADO (ROJO)
+          statusBadge.className = 'status-badge offline';
+          statusDot.className = 'status-dot offline';
+          statusText.textContent = 'Rastreador desconectado';
+          lblEstado.textContent = 'Desconectado';
+          lblEstado.style.color = '#f87171';
         }
+
       } catch (error) {
-        console.log('Esperando señal...');
+        // Error de red -> DESCONECTADO (ROJO)
+        statusBadge.className = 'status-badge offline';
+        statusDot.className = 'status-dot offline';
+        statusText.textContent = 'Rastreador desconectado';
+        lblEstado.textContent = 'Desconectado';
+        lblEstado.style.color = '#f87171';
       }
     }
 
     document.getElementById('btnCenter').addEventListener('click', () => {
-      map.setView(marker.getLatLng(), 17, { animate: true });
-      marker.openPopup();
+      if (marker) {
+        map.setView(marker.getLatLng(), 17, { animate: true });
+        marker.openPopup();
+      }
     });
 
-    actualizarPosicion();
-    setInterval(actualizarPosicion, 3000);
+    // Consultar cada 3 segundos
+    verificarRastreador();
+    setInterval(verificarRastreador, 3000);
   </script>
 </body>
 </html>
