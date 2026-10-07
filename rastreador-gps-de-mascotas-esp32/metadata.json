@@ -1,0 +1,6 @@
+{
+  "name": "Rastreador GPS de Mascotas ESP32",
+  "description": "Monitor en tiempo real con mapa Leaflet, diagnóstico de conexión y guía de hardware para el proyecto escolar de rastreador GPS con ESP32 y NEO-6M.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
