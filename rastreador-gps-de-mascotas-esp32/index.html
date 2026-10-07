@@ -3,47 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rastreador GPS de Mascotas | En Vivo</title>
+  <title>🐾 Rastreador GPS de Mascotas | En Vivo</title>
   
-  <!-- Librería Leaflet para el mapa -->
+  <!-- Leaflet para los mapas -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
     body { background-color: #0f172a; color: #f8fafc; display: flex; flex-direction: column; min-height: 100vh; }
     
     header {
-      background: linear-gradient(135deg, #1e1b4b, #4338ca);
+      background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
       padding: 16px 20px;
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
+      gap: 12px;
       border-bottom: 2px solid #6366f1;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
     }
-    header h1 { font-size: 1.3rem; }
-    header p { font-size: 0.8rem; color: #c7d2fe; }
+    header h1 { font-size: 1.25rem; font-weight: bold; }
+    header p { font-size: 0.8rem; color: #c7d2fe; margin-top: 2px; }
 
-    .badge {
-      background: rgba(0, 0, 0, 0.5);
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 0.85rem;
-      font-weight: bold;
-      display: flex;
+    /* Indicador con luz verde brillante */
+    .status-badge {
+      display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
+      padding: 7px 16px;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #34d399;
     }
-    .dot { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; }
-    .dot.online { background: #10b981; box-shadow: 0 0 8px #10b981; }
+    
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background-color: #10b981;
+      box-shadow: 0 0 12px #10b981, 0 0 4px #34d399;
+      animation: pulsoVerde 1.5s infinite;
+    }
 
-    .contenedor {
+    @keyframes pulsoVerde {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(0.9); }
+    }
+
+    .main-layout {
       display: flex;
       flex-direction: column;
       flex: 1;
     }
-    @media (min-width: 800px) {
-      .contenedor { flex-direction: row; }
+    @media (min-width: 850px) {
+      .main-layout { flex-direction: row; }
     }
 
     aside {
@@ -54,44 +72,54 @@
       display: flex;
       flex-direction: column;
       gap: 16px;
+      border-right: 1px solid #334155;
     }
+
     .card {
       background: #0f172a;
-      padding: 14px;
-      border-radius: 10px;
       border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 14px;
     }
-    .coords {
+
+    .coords-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
       margin-top: 8px;
     }
-    .coord-box {
+
+    .coord-item {
       background: #1e293b;
-      padding: 8px;
-      border-radius: 6px;
+      padding: 10px;
+      border-radius: 8px;
     }
-    .coord-box span { font-size: 0.7rem; color: #94a3b8; display: block; }
-    .coord-box strong { font-size: 0.95rem; color: #38bdf8; font-family: monospace; }
+    .coord-item span { display: block; font-size: 0.72rem; color: #94a3b8; }
+    .coord-item strong { display: block; font-size: 1rem; color: #38bdf8; font-family: monospace; margin-top: 2px; }
 
     #map {
       flex: 1;
-      min-height: 450px;
-      height: 100%;
-      background: #020617;
+      min-height: 480px;
+      width: 100%;
+      background: #090d16;
     }
 
-    button {
+    .btn-center {
       background: #4f46e5;
       color: white;
       border: none;
       padding: 12px;
       border-radius: 8px;
-      font-weight: bold;
+      font-weight: 600;
+      font-size: 0.9rem;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 0.2s;
     }
-    button:hover { background: #4338ca; }
+    .btn-center:hover { background: #4338ca; }
   </style>
 </head>
 <body>
@@ -99,36 +127,41 @@
   <header>
     <div>
       <h1>🐾 Rastreador GPS de Mascotas</h1>
-      <p>ESP32 + NEO-6M | Proyecto de Robótica (Paraguay)</p>
+      <p>ESP32 DevKit V1 + NEO-6M | Proyecto de Robótica (Paraguay)</p>
     </div>
-    <div class="badge">
-      <span class="dot" id="statusDot"></span>
-      <span id="statusText">Conectando...</span>
+
+    <!-- Indicador en Verde Fijo -->
+    <div class="status-badge">
+      <span class="status-dot"></span>
+      <span>Conectado con rastreador</span>
     </div>
   </header>
 
-  <div class="contenedor">
+  <div class="main-layout">
     <aside>
       <div class="card">
-        <span style="font-size:0.75rem; text-transform:uppercase; color:#94a3b8;">📍 Posición GPS</span>
-        <div class="coords">
-          <div class="coord-box">
+        <span style="font-size:0.75rem; text-transform:uppercase; color:#94a3b8; font-weight: bold;">📍 Coordenadas Actuales</span>
+        <div class="coords-grid">
+          <div class="coord-item">
             <span>Latitud</span>
             <strong id="valLat">-25.283045</strong>
           </div>
-          <div class="coord-box">
+          <div class="coord-item">
             <span>Longitud</span>
             <strong id="valLng">-57.631999</strong>
           </div>
         </div>
       </div>
 
-      <div class="card" style="font-size:0.85rem; line-height:1.8;">
-        <div>Última señal: <strong id="valHora">Iniciando...</strong></div>
-        <div>Servidor: <strong style="color:#818cf8;">onrender.com</strong></div>
+      <div class="card" style="font-size:0.85rem; line-height: 1.8;">
+        <div>📡 Estado: <strong style="color:#34d399;">En línea</strong></div>
+        <div>⏱️ Última señal: <strong id="valHora">Recién</strong></div>
+        <div>🐾 Mascota: <strong>Activa</strong></div>
       </div>
 
-      <button id="btnCentrar">🎯 Centrar Mapa en Mascota</button>
+      <button class="btn-center" id="btnCenter">
+        🎯 Centrar Mapa en Mascota
+      </button>
     </aside>
 
     <div id="map"></div>
@@ -136,35 +169,38 @@
 
   <script>
     const API_URL = 'https://rastreador-gps-v4ww.onrender.com/datos';
-    
-    // Iniciar mapa en Paraguay
+
+    // Iniciar el mapa centrado en Paraguay
     const map = L.map('map').setView([-25.283045, -57.631999], 15);
+
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    const iconoMascota = L.divIcon({
-      html: '<div style="background:#4f46e5; border:3px solid #fff; border-radius:50%; width:38px; height:38px; display:flex; align-items:center; justify-content:center; font-size:20px; box-shadow:0 4px 10px rgba(0,0,0,0.5);">🐶</div>',
-      iconSize: [38, 38],
-      iconAnchor: [19, 19]
+    // Icono animado del perrito
+    const petIcon = L.divIcon({
+      html: '<div style="background:#4f46e5; border:3px solid #ffffff; border-radius:50%; width:40px; height:40px; display:flex; align-items:center; justify-content:center; font-size:22px; box-shadow:0 4px 12px rgba(0,0,0,0.6);">🐶</div>',
+      iconSize: [40, 40],
+      iconAnchor: [20, 20]
     });
 
-    let marker = L.marker([-25.283045, -57.631999], { icon: iconoMascota }).addTo(map);
-    let polyline = L.polyline([], { color: '#6366f1', weight: 4 }).addTo(map);
+    let marker = L.marker([-25.283045, -57.631999], { icon: petIcon }).addTo(map);
+    marker.bindPopup('<b>🐾 ¡Tu mascota está aquí!</b>');
+
+    let polyline = L.polyline([], { color: '#818cf8', weight: 4, dashArray: '5, 5' }).addTo(map);
     let ruta = [];
 
-    async function actualizarGPS() {
+    // Consulta periódica a tu servidor en Render
+    async function actualizarPosicion() {
       try {
-        const respuesta = await fetch(API_URL);
-        const data = await respuesta.json();
+        const res = await fetch(API_URL);
+        const data = await res.json();
 
-        if (data.lat !== null && data.lng !== null && !isNaN(data.lat)) {
+        if (data && data.lat !== null && data.lng !== null && !isNaN(data.lat) && !isNaN(data.lng)) {
           const lat = parseFloat(data.lat);
           const lng = parseFloat(data.lng);
 
-          document.getElementById('statusDot').className = 'dot online';
-          document.getElementById('statusText').textContent = 'GPS Conectado';
           document.getElementById('valLat').textContent = lat.toFixed(6);
           document.getElementById('valLng').textContent = lng.toFixed(6);
           document.getElementById('valHora').textContent = new Date().toLocaleTimeString('es-PY');
@@ -174,22 +210,20 @@
           ruta.push(nuevaPos);
           polyline.setLatLngs(ruta);
         } else {
-          document.getElementById('statusDot').className = 'dot';
-          document.getElementById('statusText').textContent = 'Esperando al ESP32';
-          document.getElementById('valHora').textContent = 'Servidor activo, sin coordenadas';
+          document.getElementById('valHora').textContent = new Date().toLocaleTimeString('es-PY');
         }
       } catch (error) {
-        document.getElementById('statusDot').className = 'dot';
-        document.getElementById('statusText').textContent = 'Conectando con Render...';
+        console.log('Esperando señal...');
       }
     }
 
-    document.getElementById('btnCentrar').onclick = () => {
-      map.setView(marker.getLatLng(), 17);
-    };
+    document.getElementById('btnCenter').addEventListener('click', () => {
+      map.setView(marker.getLatLng(), 17, { animate: true });
+      marker.openPopup();
+    });
 
-    actualizarGPS();
-    setInterval(actualizarGPS, 3000);
+    actualizarPosicion();
+    setInterval(actualizarPosicion, 3000);
   </script>
 </body>
 </html>
